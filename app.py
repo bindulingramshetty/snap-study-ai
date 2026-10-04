@@ -22,7 +22,7 @@ st.set_page_config(
 # -----------------------------
 
 client = genai.Client(
-    api_key=st.secrets["AQ.Ab8RN6LqLhaYzNteD7V5myvlWTNUR5Xo2ZYFhhCHA5jTuBLC1g"]
+    api_key=st.secrets["GEMINI_API_KEY"]
 )
 
 
