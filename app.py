@@ -22,7 +22,7 @@ st.set_page_config(
 # -----------------------------
 
 client = genai.Client(
-    api_key=st.secrets["GEMINI_API_KEY"]
+    api_key=st.secrets["AQ.Ab8RN6LqLhaYzNteD7V5myvlWTNUR5Xo2ZYFhhCHA5jTuBLC1g"]
 )
 
 
@@ -35,7 +35,7 @@ if "messages" not in st.session_state:
 
 if "chat" not in st.session_state:
     st.session_state.chat = client.chats.create(
-        model="gemini-2.5-flash",
+        model="gemini-3.8-flash",
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT
         )
