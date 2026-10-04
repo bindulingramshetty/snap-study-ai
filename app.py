@@ -1,6 +1,4 @@
-import smtplib
-from email.mime.text import MIMEText
-
+import requests
 import streamlit as st
 from google import genai
 from google.genai import types
@@ -8,9 +6,9 @@ from google.genai import types
 from prompts import SYSTEM_PROMPT
 
 
-# --------------------------------------------------
-# PAGE CONFIGURATION
-# --------------------------------------------------
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
 
 st.set_page_config(
     page_title="Snap & Study AI",
@@ -19,18 +17,18 @@ st.set_page_config(
 )
 
 
-# --------------------------------------------------
+# -----------------------------
 # GEMINI CLIENT
-# --------------------------------------------------
+# -----------------------------
 
 client = genai.Client(
     api_key=st.secrets["GEMINI_API_KEY"]
 )
 
 
-# --------------------------------------------------
+# -----------------------------
 # SESSION STATE
-# --------------------------------------------------
+# -----------------------------
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -47,54 +45,54 @@ if "last_response" not in st.session_state:
     st.session_state.last_response = ""
 
 
-# --------------------------------------------------
+# -----------------------------
 # TITLE
-# --------------------------------------------------
+# -----------------------------
 
 st.title("📸 Snap & Study AI")
 
 st.write(
-    "Upload a study image or ask a question. "
-    "I'll explain it in simple language."
+    "Upload a question, note, diagram or study material "
+    "and let AI explain it simply."
 )
 
 
-# --------------------------------------------------
-# DISPLAY PREVIOUS CHAT
-# --------------------------------------------------
+# -----------------------------
+# PREVIOUS MESSAGES
+# -----------------------------
 
 for message in st.session_state.messages:
 
     with st.chat_message(message["role"]):
 
-        if message.get("image") is not None:
+        if message.get("image"):
             st.image(message["image"], width=400)
 
         st.markdown(message["content"])
 
 
-# --------------------------------------------------
+# -----------------------------
 # IMAGE UPLOAD
-# --------------------------------------------------
+# -----------------------------
 
 uploaded_file = st.file_uploader(
-    "📷 Upload a question, note, diagram or study material",
+    "📷 Upload your study material",
     type=["jpg", "jpeg", "png"]
 )
 
 
-# --------------------------------------------------
+# -----------------------------
 # CHAT INPUT
-# --------------------------------------------------
+# -----------------------------
 
 user_text = st.chat_input(
-    "Ask something about your study material..."
+    "Ask a question..."
 )
 
 
-# --------------------------------------------------
-# PROCESS USER MESSAGE
-# --------------------------------------------------
+# -----------------------------
+# PROCESS INPUT
+# -----------------------------
 
 if user_text or uploaded_file:
 
@@ -102,9 +100,22 @@ if user_text or uploaded_file:
         question = user_text
     else:
         question = (
-            "Please analyze this image and explain the "
-            "important content in simple language."
+            "Analyze this image and explain the important "
+            "content in simple language for a student."
         )
+
+    image_bytes = None
+
+    if uploaded_file:
+        image_bytes = uploaded_file.getvalue()
+
+    # Show user message
+    with st.chat_message("user"):
+
+        if image_bytes:
+            st.image(image_bytes, width=400)
+
+        st.markdown(question)
 
     # Save user message
     user_message = {
@@ -112,28 +123,19 @@ if user_text or uploaded_file:
         "content": question
     }
 
-    if uploaded_file:
-        image_bytes = uploaded_file.getvalue()
+    if image_bytes:
         user_message["image"] = image_bytes
 
     st.session_state.messages.append(user_message)
 
-    # Show user message
-    with st.chat_message("user"):
-
-        if uploaded_file:
-            st.image(image_bytes, width=400)
-
-        st.markdown(question)
-
     # Ask Gemini
     with st.chat_message("assistant"):
 
-        with st.spinner("🧠 Understanding your study material..."):
+        with st.spinner("🧠 Gemini is analyzing..."):
 
             try:
 
-                if uploaded_file:
+                if image_bytes:
 
                     image_part = types.Part.from_bytes(
                         data=image_bytes,
@@ -163,92 +165,72 @@ if user_text or uploaded_file:
                     }
                 )
 
-            except Exception as e:
+            except Exception as error:
 
-                st.error(
-                    "Something went wrong while contacting Gemini."
-                )
-
-                st.error(str(e))
+                st.error("Something went wrong.")
+                st.error(str(error))
 
 
-# --------------------------------------------------
-# EMAIL FUNCTION
-# --------------------------------------------------
+# -----------------------------
+# TELEGRAM FUNCTION
+# -----------------------------
 
-def send_email(receiver_email, subject, body):
+def send_to_telegram(message):
 
-    sender_email = st.secrets["GMAIL_ADDRESS"]
-    app_password = st.secrets["GMAIL_APP_PASSWORD"]
+    bot_token = st.secrets["TELEGRAM_BOT_TOKEN"]
+    chat_id = st.secrets["TELEGRAM_CHAT_ID"]
 
-    message = MIMEText(body)
+    url = (
+        f"https://api.telegram.org/bot"
+        f"{bot_token}/sendMessage"
+    )
 
-    message["Subject"] = subject
-    message["From"] = sender_email
-    message["To"] = receiver_email
+    response = requests.post(
+        url,
+        data={
+            "chat_id": chat_id,
+            "text": message
+        },
+        timeout=30
+    )
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-
-        server.login(
-            sender_email,
-            app_password
-        )
-
-        server.sendmail(
-            sender_email,
-            receiver_email,
-            message.as_string()
-        )
+    response.raise_for_status()
 
 
-# --------------------------------------------------
-# EMAIL SECTION
-# --------------------------------------------------
+# -----------------------------
+# TELEGRAM BUTTON
+# -----------------------------
 
 if st.session_state.last_response:
 
     st.divider()
 
-    st.subheader("📧 Save this explanation")
+    st.subheader("💬 Save to Telegram")
 
-    receiver_email = st.text_input(
-        "Enter your email address"
-    )
+    if st.button("📨 Send Explanation to Telegram"):
 
-    if st.button("📨 Send Explanation to Email"):
+        try:
 
-        if not receiver_email:
-
-            st.warning(
-                "Please enter your email address first."
+            send_to_telegram(
+                st.session_state.last_response
             )
 
-        else:
+            st.success(
+                "✅ Explanation sent to Telegram!"
+            )
 
-            try:
+        except Exception as error:
 
-                send_email(
-                    receiver_email,
-                    "Snap & Study AI - Study Explanation",
-                    st.session_state.last_response
-                )
+            st.error(
+                "Telegram message could not be sent."
+            )
 
-                st.success(
-                    "✅ Explanation sent successfully!"
-                )
-
-            except Exception as e:
-
-                st.error(
-                    "Email could not be sent."
-                )
-
-                st.error(str(e))
+            st.error(str(error))
 
 
-# --------------------------------------------------
+# -----------------------------
 # FOOTER
-# --------------------------------------------------
+# -----------------------------
 
 st.divider()
 
